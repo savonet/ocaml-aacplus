@@ -198,7 +198,7 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
 CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data)
 {
   CAMLparam2(aac_env, data);
-  CAMLlocal2(ans,datac);  
+  CAMLlocal1(ans);  
   
   AacpAudioContext *s = Aac_env_val(aac_env);
 
