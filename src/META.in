@@ -1,0 +1,6 @@
+name="aacplus"
+version="@VERSION@"
+description="OCaml bindings for aacplus"
+requires="@requires@"
+archive(byte)="aacplus.cma"
+archive(native)="aacplus.cmxa"
