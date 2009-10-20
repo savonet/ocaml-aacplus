@@ -55,7 +55,7 @@ typedef struct AacpAudioContext {
     
     IIR21_RESAMPLER IIR21_reSampler[MAX_CHANNELS];
     float inputBuffer[(AACENC_BLOCKSIZE*2 + MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS];
-    char frame[(6144/8)*MAX_CHANNELS+ADTS_HEADER_SIZE];  
+    char frame[AACENC_BLOCKSIZE*2];  
   
     int nChannelsAAC, nChannelsSBR;
     unsigned int sampleRateAAC;
@@ -184,6 +184,7 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   s->config.sampleRate = s->sampleRateAAC;
   if (AacEncOpen(&s->aacEnc, s->config) != 0){
     AacEncClose(s->aacEnc);
+    free(s);
     caml_raise_constant(*caml_named_value("aacplus_exn_encoder_init_failed"));
   }
    
@@ -206,7 +207,7 @@ CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data)
   short *TimeDataPcm = (short *)String_val(data);
 
   for(i = 0; i < AACENC_BLOCKSIZE*2*s->nChannelsSBR; i++)
-    s->inputBuffer[i+s->writeOffset] = TimeDataPcm[i];
+    s->inputBuffer[i+s->writeOffset] = (float) TimeDataPcm[i];
 
   /* Got to blocking section */
   caml_enter_blocking_section();
