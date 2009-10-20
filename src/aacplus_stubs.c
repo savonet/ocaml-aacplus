@@ -208,8 +208,6 @@ CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data)
   for(i = 0; i < AACENC_BLOCKSIZE*2*s->nChannelsSBR; i++)
     s->inputBuffer[i+s->writeOffset] = TimeDataPcm[i];
 
-  /* Register env as global root */
-  caml_register_global_root(&aac_env);
   /* Got to blocking section */
   caml_enter_blocking_section();
 
@@ -243,8 +241,6 @@ CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data)
     memmove( s->inputBuffer,s->inputBuffer+AACENC_BLOCKSIZE*2*s->nChannelsSBR,s->writeOffset*sizeof(float));
   }
 
-  /* Remove env from global root */
-  caml_remove_global_root(&aac_env);
   /* Leave blocking section */
   caml_leave_blocking_section();
 
