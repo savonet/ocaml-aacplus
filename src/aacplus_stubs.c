@@ -123,7 +123,7 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   int bit_rate = Int_val(bitrate);
   AacpAudioContext *s = malloc(sizeof(AacpAudioContext));
   if (s == NULL) 
-    caml_failwith("malloc");  
+    caml_raise_out_of_memory();  
   
   s->coreWriteOffset = 0;
   s->envReadOffset = 0;
