@@ -20,32 +20,29 @@
 
  (** OCaml bindings for the libaacplus. *)
 
-type t
+type priv
 
-exception IIR21_reSampler_size_too_big
-exception No_sbr_settings
-exception Create_failed
-exception Invalid_size
+type t = int * int * int * priv
 
-let () =
-  Callback.register_exception "aacplus_exn_resampler_size" IIR21_reSampler_size_too_big;
-  Callback.register_exception "aacplus_exn_no_sbr_settings" No_sbr_settings;
-  Callback.register_exception "aacplus_exn_encoder_init_failed" Create_failed
+exception Invalid_data
+exception Invalid_config
 
-external init : unit -> unit = "ocaml_aacplus_init"
+let () = Callback.register_exception "aacplus_exn_encoder_invalid_config" Invalid_config
 
-external destroy : unit -> unit = "ocaml_aacplus_destroy"
-
-external create : int -> int -> int -> t = "ocaml_aacplus_init_enc"
+external create : int -> int -> int -> t  = "ocaml_aacplus_init_enc"
 
 let create ~channels ~samplerate ~bitrate () = 
   create channels samplerate bitrate
 
-external data_length : t -> int = "ocaml_aacplus_block_size"
+let frame_size (chans,x,_,_) = x / chans
 
-external encode : t -> string -> string = "ocaml_aacplus_encode_frame"
+external encode : priv -> float array array -> int -> string = "ocaml_aacplus_encode_frame"
 
-let encode enc data = 
-  if String.length data <> data_length enc then
-    raise Invalid_size;
-  encode enc data
+let encode ((chans,_,out_len,enc) as h) data =
+  if Array.length data <> chans then
+    raise Invalid_data;
+  Array.iter 
+    (fun x -> if Array.length x <> frame_size h then raise Invalid_data)
+    data ;
+  encode enc data out_len
+

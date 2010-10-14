@@ -1,7 +1,7 @@
 /*
  * OCaml bindings for libaacplus
  *
- * Copyright 2005-2006 Savonet team
+ * Copyright 2005-2010 Savonet team
  *
  * This file is part of ocaml-aacplus.
  *
@@ -29,56 +29,15 @@
 #include <caml/custom.h>
 #include <caml/signals.h>
 
+#include <aacplus.h>
 #include <string.h>
 
-#include <libaacplus/sbr_main.h>
-#include <libaacplus/aacenc.h>
-#include <libaacplus/adts.h>
-#include <libaacplus/cfftn.h>
-#include <libaacplus/resampler.h>
-
-#define CORE_DELAY   (1600)
-/* ((1600 (core codec)*2 (multi rate) + 6*64 (sbr dec delay) - 2048 (sbr enc delay) + magic */
-#define INPUT_DELAY  ((CORE_DELAY)*2 +6*64-2048+1)     
-/* the additional max resampler filter delay (source fs) */
-#define MAX_DS_FILTER_DELAY 16
-/* (96-64) makes AAC still some 64 core samples too early wrt SBR ... maybe -32 would be even more correct, 
- * but 1024-32 would need additional SBR bitstream delay by one frame */
-#define CORE_INPUT_OFFSET_PS (0)  
-
-typedef struct AacpAudioContext {
-    struct AAC_ENCODER *aacEnc;
-    HANDLE_SBR_ENCODER hEnvEnc;
-
-    AACENC_CONFIG     config;
-    sbrConfiguration sbrConfig;
-    
-    IIR21_RESAMPLER IIR21_reSampler[MAX_CHANNELS];
-    float inputBuffer[(AACENC_BLOCKSIZE*2 + MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS];
-    char frame[AACENC_BLOCKSIZE*2];  
-  
-    int nChannelsAAC, nChannelsSBR;
-    unsigned int sampleRateAAC;
-
-    unsigned int numAncDataBytes;
-    int useParametricStereo;
-    int coreWriteOffset;
-    int envReadOffset;
-    int writeOffset;
-    
-    unsigned char ancDataBytes[MAX_PAYLOAD_SIZE];
-    char adtsDataBytes[ADTS_HEADER_SIZE];
-    int adtsOffset;
-} AacpAudioContext;
-
-#define Aac_env_val(v) (*((AacpAudioContext**)Data_custom_val(v)))
+#define Aac_env_val(v) (*((aacplusEncHandle*)Data_custom_val(v)))
 
 static void finalize_aac_env(value c)
 {
-  AacpAudioContext *s = Aac_env_val(c);
-  AacEncClose(s->aacEnc);
-  EnvClose(s->hEnvEnc);
-  free(s);
+  aacplusEncHandle h = Aac_env_val(c);
+  aacplusEncClose(h);
 }
 
 static struct custom_operations aac_env_ops =
@@ -91,162 +50,105 @@ static struct custom_operations aac_env_ops =
   custom_deserialize_default
 };
 
-CAMLprim value ocaml_aacplus_init()
-{
-  CAMLparam0();
-  init_plans(); 
-  CAMLreturn(Val_unit);
-}
-
-CAMLprim value ocaml_aacplus_destroy()
-{
-  CAMLparam0();
-  destroy_plans();
-  CAMLreturn(Val_unit);
-}
-
-CAMLprim value ocaml_aacplus_block_size(value aac_env)
-{
-  CAMLparam1(aac_env);
-  AacpAudioContext *s = Aac_env_val(aac_env);
-  /* String size: 2 bytes per elements. */
-  CAMLreturn(Val_int(AACENC_BLOCKSIZE*2*2*(s->nChannelsSBR)));
-}
-
 CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitrate)
 {
   CAMLparam0();
-  CAMLlocal1(ans);
+  CAMLlocal2(ret,ans);
 
   int channels = Int_val(chans);
   int sample_rate = Int_val(samplerate);
   int bit_rate = Int_val(bitrate);
-  AacpAudioContext *s = malloc(sizeof(AacpAudioContext));
-  if (s == NULL) 
+  unsigned long inputsamples;
+  unsigned long outbytes;
+  aacplusEncHandle h = aacplusEncOpen(sample_rate,
+                                      channels,
+                                      &inputsamples,
+                                      &outbytes);
+  if (h == NULL) 
     caml_raise_out_of_memory();  
-  
-  s->coreWriteOffset = 0;
-  s->envReadOffset = 0;
-  s->writeOffset=INPUT_DELAY*MAX_CHANNELS;
 
-  s->useParametricStereo = 0;
-  s->numAncDataBytes=0;
-  s->adtsOffset=ADTS_HEADER_SIZE;
+  aacplusEncConfiguration cfg;
+  cfg.sampleRate = sample_rate;
+  cfg.bitRate = bit_rate;
+  cfg.nChannelsIn = channels;
+  cfg.nChannelsOut = channels;
+  cfg.bandWidth = 0;
+  cfg.inputFormat = AACPLUS_INPUT_16BIT;
+  cfg.outputFormat = 1;
 
+  if (aacplusEncSetConfiguration(h,&cfg) == 0)
+    caml_raise_constant(*caml_named_value("aacplus_exn_encoder_invalid_config"));
 
-  /* number of channels */
-  if (channels < 1 || channels > 2) {
-    free(s);
-    caml_raise_constant(*caml_named_value("aacplus_exn_no_sbr_settings"));
-  }
-    
-  AacInitDefaultConfig(&s->config);
-  s->nChannelsAAC = s->nChannelsSBR = channels;
-  s->sampleRateAAC = sample_rate;
-    
-  /* ps or sbr? */
-  if ( (channels == 2) && (bit_rate >= 16000) && (bit_rate < 44001) ) {
-    s->useParametricStereo = 1;
-    s->nChannelsAAC = 1;
+  ret = caml_alloc_tuple(4);
+  Store_field(ret,0,chans);
+  Store_field(ret,1,Val_int(inputsamples));
+  Store_field(ret,2,Val_long(outbytes));
 
-    s->envReadOffset = (MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS;
-    s->coreWriteOffset = CORE_INPUT_OFFSET_PS;
-    s->writeOffset = s->envReadOffset;
-  } else {
-    /* set up 2:1 downsampling */
-    InitIIR21_Resampler(&(s->IIR21_reSampler[0]));
-    if (channels == 2) InitIIR21_Resampler(&(s->IIR21_reSampler[1]));
-      if (s->IIR21_reSampler[0].delay > MAX_DS_FILTER_DELAY) {
-        free(s);
-        caml_raise_constant(*caml_named_value("aacplus_exn_resampler_size"));
-      }
-      s->writeOffset += s->IIR21_reSampler[0].delay * channels; //MAX_CHANNELS;
-  }
-    
-  s->config.bitRate = bit_rate;
-  s->config.nChannelsIn=channels;
-  s->config.nChannelsOut=s->nChannelsAAC;
-  s->config.bandWidth=0;
-    
-  /* set up SBR configuration	*/
-  if(!IsSbrSettingAvail (bit_rate, s->nChannelsAAC, s->sampleRateAAC, &s->sampleRateAAC)) {
-    free(s);
-    caml_raise_constant(*caml_named_value("aacplus_exn_no_sbr_settings"));
-  }
+  ans = caml_alloc_custom(&aac_env_ops, sizeof(aacplusEncHandle), 1, 0);
+  Aac_env_val(ans) = h;
 
-  InitializeSbrDefaults (&s->sbrConfig);
-  s->sbrConfig.usePs = s->useParametricStereo;
-    
-  AdjustSbrSettings(&s->sbrConfig, bit_rate, s->nChannelsAAC, s->sampleRateAAC, AACENC_TRANS_FAC, 24000);
-  EnvOpen(&s->hEnvEnc, s->inputBuffer + s->coreWriteOffset, &s->sbrConfig, &s->config.bandWidth);
-    
-  /* set up AAC encoder, now that samling rate is known */
-  s->config.sampleRate = s->sampleRateAAC;
-  if (AacEncOpen(&s->aacEnc, s->config) != 0){
-    AacEncClose(s->aacEnc);
-    free(s);
-    caml_raise_constant(*caml_named_value("aacplus_exn_encoder_init_failed"));
-  }
-   
-  adts_hdr(s->adtsDataBytes, &s->config);
+  Store_field(ret,3,ans);
 
-  ans = caml_alloc_custom(&aac_env_ops, sizeof(AacpAudioContext*), 1, 0);
-  Aac_env_val(ans) = s;
-
-  CAMLreturn(ans);
+  CAMLreturn(ret);
 }
 
-CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data)
+static inline int16_t clip(double s)
+{
+  if (s < -1)
+  {
+    return INT16_MIN;
+  }
+  else if (s > 1)
+  {
+    return INT16_MAX;
+  }
+  else
+    return (s * INT16_MAX);
+}
+
+CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data, value outlen)
 {
   CAMLparam2(aac_env, data);
   CAMLlocal1(ans);  
-  
-  AacpAudioContext *s = Aac_env_val(aac_env);
 
-  int i, ch, outSamples, bytes_written;
-  short *TimeDataPcm = (short *)String_val(data);
+  aacplusEncHandle h = Aac_env_val(aac_env);
 
-  for(i = 0; i < AACENC_BLOCKSIZE*2*s->nChannelsSBR; i++)
-    s->inputBuffer[i+s->writeOffset] = (float) TimeDataPcm[i];
+  int channels = Wosize_val(data);
+  if (channels < 1)
+    caml_failwith("No data to encode!");
+  int samples = Wosize_val(Field(data,0)) / Double_wosize;
+  int len = samples * channels ;
 
-  /* Got to blocking section */
+  int16_t *buf = malloc(len * sizeof(int16_t)); // int16_t samples
+  if (buf == NULL)
+    caml_raise_out_of_memory();
+
+  int i, c;
+  for (c = 0; c < channels; c++)
+    for (i = 0; i < samples; i++)
+      buf[i*channels + c] = clip(Double_field(Field(data,c),i));
+
+  int out_len = Int_val(outlen);
+  unsigned char *outbuf = malloc(out_len);
+  if (outbuf == NULL)
+  {
+    free(buf);
+    caml_raise_out_of_memory();
+  }
+
   caml_enter_blocking_section();
 
-  /* encode one SBR frame */
-  EnvEncodeFrame( s->hEnvEnc, s->inputBuffer + s->envReadOffset, 
-		  s->inputBuffer + s->coreWriteOffset, s->nChannelsSBR, 
-		  &s->numAncDataBytes, s->ancDataBytes);
-  
-  /* 2:1 downsampling for AAC core */
-  if (!s->useParametricStereo) {
-    for( ch=0; ch < s->nChannelsSBR; ch++ )
-      IIR21_Downsample( &(s->IIR21_reSampler[ch] ), s->inputBuffer + s->writeOffset+ch, 
-                        AACENC_BLOCKSIZE * 2, s->nChannelsSBR, s->inputBuffer + ch, &outSamples, s->nChannelsSBR);
-  }
-    
-  /* encode one AAC frame */
-  AacEncEncode( s->aacEnc, s->inputBuffer, 
-                s->useParametricStereo ? 1 : s->nChannelsSBR, /* stride (step) */ s->ancDataBytes, 
-                &s->numAncDataBytes, (unsigned *) (s->frame + s->adtsOffset), &bytes_written);
-    
-  /* write ADTS header (if needed) */
-  if(s->adtsOffset){
-    memcpy(s->frame, s->adtsDataBytes, s->adtsOffset);
-    adts_hdr_up(s->frame, bytes_written);
-    bytes_written += s->adtsOffset;
-  }
- 
-  if (s->useParametricStereo){
-    memcpy( s->inputBuffer,s->inputBuffer+AACENC_BLOCKSIZE,CORE_INPUT_OFFSET_PS*sizeof(float));
-  } else {
-    memmove( s->inputBuffer,s->inputBuffer+AACENC_BLOCKSIZE*2*s->nChannelsSBR,s->writeOffset*sizeof(float));
-  }
+  int bytes = aacplusEncEncode(h, (int32_t *)buf, len,
+                               outbuf, out_len);
 
-  /* Leave blocking section */
   caml_leave_blocking_section();
+ 
+  free(buf);
 
-  ans = caml_alloc_string(bytes_written);
-  memcpy(String_val(ans), s->frame, bytes_written);
-
+  ans = caml_alloc_string(bytes);
+  memcpy(String_val(ans),outbuf,bytes);
+  free(outbuf);
+ 
   CAMLreturn(ans);
+
 }

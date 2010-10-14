@@ -22,43 +22,12 @@
 
 type t
 
-exception IIR21_reSampler_size_too_big
-exception No_sbr_settings
-exception Create_failed
-exception Invalid_size
+exception Invalid_data
+exception Invalid_config
 
-(** Initialize the encoding module. 
-  * Must be called before anything happen. *)
-val init : unit -> unit
-
-(** Destroy anything create at [init].
-  * Should be called when ending the encoding process. *)
-val destroy : unit -> unit
-
-(** Create a new encoder. Bitrate is in bits (e.g. 64000).
-  *
-  * Raises [No_sbr_settings] if no SBR settings match 
-  * the requested settings.
-  * 
-  * Raises [IIR21_reSampler_size_too_big] is downsampling is
-  * required and could not be enabled.
-  *
-  * Raises [Create_failed] if creation failed for another reason. *)
 val create : channels:int -> samplerate:int -> bitrate:int -> unit -> t
 
-(** Get encoder's data length. 
-  *
-  * Data string submited for encoding when using
-  * [encode] should have be exactly
-  * this length. *)
-val data_length : t -> int
+val frame_size : t -> int
 
-(** Encode data. 
-  *
-  * Input format: interleaved S16LE
-  * data. 
-  *
-  * Raises [Invalid_size] if data string length is 
-  * not exactly [data_length]. *)
-val encode : t -> string -> string
+val encode : t -> float array array -> string
 
