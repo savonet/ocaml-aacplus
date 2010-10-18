@@ -1,7 +1,6 @@
 ocaml-aacplus
 
-
-This package contains an O'Caml interface for 
+This package contains an OCaml interface for 
 the AAC+ encoding library, otherwise known as libaacplus.
 
 Please read the COPYING file before using this software.
@@ -9,9 +8,9 @@ Please read the COPYING file before using this software.
 Prerequisites:
 ==============
 
-- ocaml >= 3.0.6 (haven't tried earlier versions)
+- ocaml >= 3.10.2 (haven't tried earlier versions)
 
-- libaacplus >= 1.0.4 (haven't tried earlier versions)
+- libaacplus >= 2.0
 
 - findlib >= 0.8.1 (haven't tried earlier versions)
 
