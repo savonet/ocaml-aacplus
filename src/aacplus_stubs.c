@@ -73,8 +73,9 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   cfg.nChannelsIn = channels;
   cfg.nChannelsOut = channels;
   cfg.bandWidth = 0;
-  cfg.inputFormat = AACPLUS_INPUT_16BIT;
+  cfg.inputFormat = AACPLUS_INPUT_FLOAT;
   cfg.outputFormat = 1;
+  cfg.nSamplesPerFrame = inputsamples / (2*channels);
 
   if (aacplusEncSetConfiguration(h,&cfg) == 0)
     caml_raise_constant(*caml_named_value("aacplus_exn_encoder_invalid_config"));
@@ -92,18 +93,18 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   CAMLreturn(ret);
 }
 
-static inline int16_t clip(double s)
+static inline float clip(double s)
 {
   if (s < -1)
   {
-    return INT16_MIN;
+    return -1;
   }
   else if (s > 1)
   {
-    return INT16_MAX;
+    return 1;
   }
   else
-    return (s * INT16_MAX);
+    return s;
 }
 
 CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data, value outlen)
@@ -119,7 +120,7 @@ CAMLprim value ocaml_aacplus_encode_frame(value aac_env, value data, value outle
   int samples = Wosize_val(Field(data,0)) / Double_wosize;
   int len = samples * channels ;
 
-  int16_t *buf = malloc(len * sizeof(int16_t)); // int16_t samples
+  float *buf = malloc(len * sizeof(float)); // float samples
   if (buf == NULL)
     caml_raise_out_of_memory();
 
