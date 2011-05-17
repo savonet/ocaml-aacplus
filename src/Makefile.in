@@ -12,6 +12,7 @@ OCAMLFIND_LDCONF = @OCAMLFIND_LDCONF@
 OCAMLC = @OCAMLC@
 OCAMLOPT = @OCAMLOPT@
 OCAMLBEST = @OCAMLBEST@
+OCAML_DYNLINK = @OCAML_DYNLINK@
 OCAMLMKTOP = @OCAMLMKTOP@
 OCAMLMKLIB = @OCAMLMKLIB@
 OCAMLCP = @OCAMLCP@
@@ -27,7 +28,7 @@ OCAMLLIBPATH = @CAMLLIBPATH@
 SOURCES = aacplus_stubs.c aacplus.mli aacplus.ml
 RESULT = aacplus
 OCAMLDOCFLAGS = -stars
-LIBINSTALL_FILES = $(wildcard *.mli *.cmi *.cma *.cmxa *.cmx *.a *.so)
+LIBINSTALL_FILES = $(wildcard *.mli *.cmi *.cma *.cmxa *.cmx *.a *.so *.cmxs)
 ACLIBS = @LIBS@ @aacplus_LIBS@
 LDFLAGS = @LDFLAGS@ @aacplus_LDFLAGS@
 CLIBS = $(ACLIBS:-l%=%)
@@ -40,11 +41,36 @@ INCDIRS = @INC@
 NO_CUSTOM = yes
 OCAMLFLAGS = @OCAMLFLAGS@
 
-all: $(OCAMLBEST)
+all: $(OCAMLBEST) $(OCAML_DYNLINK) clean-dyn-cmi
 
 byte: byte-code-library
 
 opt: native-code-library
+
+byte-dyn: aacplus.cma aacplus_loader.cma
+
+aacplus_loader.cma: aacplus_dynlink.mli aacplus_loader.ml
+	$(OCAMLC) -a $(OCAMLFLAGS) aacplus_dynlink.mli aacplus_loader.ml -o aacplus_loader.cma
+
+opt-dyn : aacplus.cma aacplus_loader.cmxs
+
+clean-dyn-cmi: $(OCAML_DYNLINK)
+	rm -f aacplus_dynlink.cmi
+
+aacplus_dynlink.mli: aacplus_dynlink.mli.in aacplus.cmi
+	$(OCAMLC) -i -intf aacplus_dynlink.mli.in > aacplus_dynlink.mli 2>/dev/null
+
+aacplus.cmxs: aacplus.ml aacplus_stubs.o
+	[ ! -f aacplus.cmx ] || mv aacplus.cmx aacplus.cmx.old
+	$(OCAMLOPT) $(OCAMLFLAGS) $(CLIBS_OPTS) -shared aacplus.ml aacplus_stubs.o -o aacplus.cmxs
+	[ ! -f aacplus.cmx.old ] || mv aacplus.cmx.old aacplus.cmx
+
+aacplus_loader.cmxs: aacplus_dynlink.mli aacplus.cmxs aacplus_loader.ml
+	[ ! -f aacplus.cmx ] || mv aacplus.cmx aacplus.cmx.old
+	[ ! -f aacplus.cmxa ] || mv aacplus.cmxa aacplus.cmxa.old
+	$(OCAMLOPT) $(OCAMLFLAGS) -shared aacplus_dynlink.mli aacplus_loader.ml -o aacplus_loader.cmxs
+	[ ! -f aacplus.cmx.old ] || mv aacplus.cmx.old aacplus.cmx
+	[ ! -f aacplus.cmxa.old ] || mv aacplus.cmxa.old aacplus.cmxa
 
 native-code-library: byte-code-library
 
@@ -54,4 +80,7 @@ uninstall: libuninstall
 
 update: uninstall install
 
+clean::
+	rm -f aacplus_dynlink*.cm* aacplus_loader.cm* aacplus_loader.o *.cmxs
+	
 -include $(OCAMLMAKEFILE)
