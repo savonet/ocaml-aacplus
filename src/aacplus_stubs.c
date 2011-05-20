@@ -67,17 +67,13 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   if (h == NULL) 
     caml_raise_out_of_memory();  
 
-  aacplusEncConfiguration cfg;
-  cfg.sampleRate = sample_rate;
-  cfg.bitRate = bit_rate;
-  cfg.nChannelsIn = channels;
-  cfg.nChannelsOut = channels;
-  cfg.bandWidth = 0;
-  cfg.inputFormat = AACPLUS_INPUT_FLOAT;
-  cfg.outputFormat = 1;
-  cfg.nSamplesPerFrame = inputsamples / (2*channels);
+  aacplusEncConfiguration *cfg = aacplusEncGetCurrentConfiguration(h);
+  cfg->bitRate = bit_rate;
+  cfg->bandWidth = 0;
+  cfg->inputFormat = AACPLUS_INPUT_FLOAT;
+  cfg->outputFormat = 1;
 
-  if (aacplusEncSetConfiguration(h,&cfg) == 0)
+  if (aacplusEncSetConfiguration(h,cfg) == 0)
     caml_raise_constant(*caml_named_value("aacplus_exn_encoder_invalid_config"));
 
   ret = caml_alloc_tuple(4);
