@@ -73,8 +73,10 @@ CAMLprim value ocaml_aacplus_init_enc(value chans, value samplerate, value bitra
   cfg->inputFormat = AACPLUS_INPUT_FLOAT;
   cfg->outputFormat = 1;
 
-  if (aacplusEncSetConfiguration(h,cfg) == 0)
+  if (aacplusEncSetConfiguration(h,cfg) == 0) {
+    aacplusEncClose(h);
     caml_raise_constant(*caml_named_value("aacplus_exn_encoder_invalid_config"));
+  }
 
   ret = caml_alloc_tuple(4);
   Store_field(ret,0,chans);
