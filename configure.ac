@@ -27,26 +27,7 @@ AC_PROG_CC()
 AC_CHECK_TOOL([AR],[ar],no)
 AC_SUBST(AR)
 PKG_PROG_PKG_CONFIG()
-#PKG_CHECK_MODULES(aacplus, aacplus, , [AC_MSG_ERROR(aacplus not found.)])
-
-AC_DEFUN([REQ_VERSION],[2.0.1])
-AC_MSG_CHECKING([for libaacplus >= REQ_VERSION()])
-# PKG_CHECK_MODULES loses when you need --libs-only-[lL]
-if ! $PKG_CONFIG --exists aacplus; then
-        AC_MSG_ERROR([aacplus not found])
-fi
-# We need at least version REQ_VERSION
-if ! $PKG_CONFIG --atleast-version=[]REQ_VERSION aacplus; then
-       AC_DEFUN([FOUND_VERSION],[`pkg-config --modversion aacplus`])
-       AC_MSG_ERROR([requires version >= REQ_VERSION(), found FOUND_VERSION()])
-fi
-AC_MSG_RESULT([ok])
-aacplus_CFLAGS=`$PKG_CONFIG --cflags aacplus`
-AC_SUBST([aacplus_CFLAGS])
-aacplus_LIBS=`$PKG_CONFIG --libs-only-l aacplus`
-AC_SUBST([aacplus_LIBS])
-aacplus_LDFLAGS=`$PKG_CONFIG --libs-only-L aacplus`
-AC_SUBST([aacplus_LDFLAGS])
+PKG_CONFIG_CHECK_MODULE([aacplus],[2.0.1])
 
 # substitutions to perform
 AC_SUBST(VERSION)

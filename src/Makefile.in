@@ -29,13 +29,13 @@ SOURCES = aacplus_stubs.c aacplus.mli aacplus.ml
 RESULT = aacplus
 OCAMLDOCFLAGS = -stars
 LIBINSTALL_FILES = $(wildcard *.mli *.cmi *.cma *.cmxa *.cmx *.a *.so *.cmxs)
-ACLIBS = @LIBS@ @aacplus_LIBS@
-LDFLAGS = @LDFLAGS@ @aacplus_LDFLAGS@
+ACLIBS = @LIBS@
+LDFLAGS = @LDFLAGS@
 CLIBS = $(ACLIBS:-l%=%)
 LIBDIRS = $(LDFLAGS:-L%=%)
 CC = @CC@
 AR = @AR@
-CFLAGS = @CFLAGS@ @aacplus_CFLAGS@ -Wall -DCAML_NAME_SPACE
+CFLAGS = @CFLAGS@ -Wall -DCAML_NAME_SPACE
 CPPFLAGS = @CPPFLAGS@
 INCDIRS = @INC@
 NO_CUSTOM = yes
