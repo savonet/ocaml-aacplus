@@ -1,3 +1,8 @@
+0.2.1 (2013-02-17)
+=====
+* Clean up encoder handler if settings failed.
+* Updated configure.
+
 0.2.0
 =====
 * Initial release
